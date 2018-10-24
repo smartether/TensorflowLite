@@ -18,12 +18,14 @@ package io.github.lizhangqu.sample;
 import android.app.Activity;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.os.SystemClock;
 import android.util.Log;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
@@ -36,11 +38,21 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import org.tensorflow.lite.Interpreter;
 
+
+//open cv
+import org.opencv.core.*;
+import org.opencv.dnn.*;
+import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgproc.Imgproc;
+import java.util.*;
+
 /** Classifies images with Tensorflow Lite. */
 public class ImageClassifier {
 
   /** Tag for the {@link Log}. */
   private static final String TAG = "TfLiteCameraDemo";
+  private static final String TAG1 = "HandRaised";
+  private static final String TAG2 = "Pos";
 
   /** Name of the model file stored in Assets. */
   private static final String MODEL_PATH = "mobilenet_quant_v1_224.tflite";
@@ -85,10 +97,10 @@ public class ImageClassifier {
             }
           });
 
+
   /** Initializes an {@code ImageClassifier}. */
   ImageClassifier(Activity activity) throws IOException {
     //CORRECT
-
     tflite = new Interpreter(loadOpenPoseModelFile(activity));
     //labelList = loadLabelList(activity);
     imgData =
@@ -96,10 +108,12 @@ public class ImageClassifier {
             DIM_BATCH_SIZE * DIM_IMG_SIZE_X * DIM_IMG_SIZE_Y * DIM_PIXEL_SIZE);
     imgData.order(ByteOrder.nativeOrder());
     //labelProbArray = new byte[1][labelList.size()];
-    labelProbArray = new float[1][1][1][19];
+    labelProbArray = new float[1][46][46][57];
     Log.d(TAG, "Created a Tensorflow Lite Image Classifier.");
   }
 
+  boolean isPrinted = false;
+  int frameCount = 0;
   /** Classifies a frame from the preview stream. */
   String classifyFrame(Bitmap bitmap) {
     if (tflite == null) {
@@ -108,10 +122,62 @@ public class ImageClassifier {
     }
     convertBitmapToByteBuffer(bitmap);
     // Here's where the magic happens!!!
-    long startTime = SystemClock.uptimeMillis();
+    long endTime=0;
+    long startTime = 0;
+    startTime = SystemClock.uptimeMillis();
+
     tflite.run(imgData, labelProbArray);
-    long endTime = SystemClock.uptimeMillis();
-    Log.d(TAG, "Timecost to run model inference: " + Long.toString(endTime - startTime));
+
+
+
+      endTime = SystemClock.uptimeMillis();
+      Log.d(TAG, "Timecost to run model inference: " + Long.toString(endTime - startTime));
+      startTime = SystemClock.uptimeMillis();
+
+    ArrayList<Point> points = new ArrayList();
+    Mat mat = MatOfFloat.zeros(new Size(46,46), CvType.CV_32F);
+    for(int heatIdx=0;heatIdx<19;heatIdx++) {
+      StringBuffer s = new StringBuffer("$$ ");
+      for (int i = 0; i < 46; i++) {
+        for (int j = 0; j < 46; j++) {
+          float p =  labelProbArray[0][i][j][heatIdx];
+            mat.put(i, j, p);
+//          if( p>0){
+//            s.append(p);
+//            s.append(" ");
+//            mat.put(i, j, p);
+//          }
+//          else{
+//            mat.put(i,j,0);
+//            s.append(0);
+//            s.append(" ");
+//          }
+        }
+      }
+
+      //Log.d(TAG, "$$ p:" + s.toString());
+
+      endTime = SystemClock.uptimeMillis();
+      Log.d(TAG, "Timecost to run MatOfFloat transform: " + Long.toString(endTime - startTime));
+      startTime = SystemClock.uptimeMillis();
+
+      //Log.d(TAG, "mat width:" + mat.size().width + " height:"+ mat.size().height);
+      Core.MinMaxLocResult mm = Core.minMaxLoc(mat);
+      Point p = new Point(-1,-1);
+      if (mm.maxVal>0.01f) {
+        p = mm.maxLoc;
+      }
+      points.add(p);
+      Log.d(TAG2, heatIdx + " max:" + p);// + " min:" + min );
+    }
+    if(points.get(4).x > 0 && points.get(2).x > 0 && points.get(4).y < points.get(2).y){
+        Log.d(TAG1,   "$$ hand Raised");
+    }
+    //Mat result = mat.reshape(1, 19);
+
+
+    endTime = SystemClock.uptimeMillis();
+    Log.d(TAG, "Timecost to run MinMaxLocResult: " + Long.toString(endTime - startTime));
     String textToShow = "";//printTopKLabels();
     textToShow = Long.toString(endTime - startTime) + "ms" + textToShow;
     return textToShow;
@@ -164,20 +230,31 @@ public class ImageClassifier {
     imgData.rewind();
     bitmap.getPixels(intValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
     // Convert the image to floating point.
-    int pixel = 0;
+
     long startTime = SystemClock.uptimeMillis();
-    float fact = 1 / 255;
-    for (int i = 0; i < DIM_IMG_SIZE_X; ++i) {
+    int pixel = 0;
+    float fact =  1;// (float)1 / (float)255;
+    //Log.d(TAG, "$$ fact:" + fact);
+/*
+    MatOfInt imageMat = new MatOfInt(intValues);
+    Mat imageMatf = Mat.zeros(368,368, CvType.CV_32F);
+    imageMat.convertTo(imageMatf, CvType.CV_32F, fact, 0);
+    float[] fArray  = new float[368 * 368 * 3];
+    for(int i=0,c=fArray.length;i<c;i++) {
+      imgData.putFloat(fArray[i]);
+    }
+*/
+
+
+    for (int i = 0; i < DIM_IMG_SIZE_X - 1; ++i) {
       for (int j = 0; j < DIM_IMG_SIZE_Y; ++j) {
         final int val = intValues[pixel++];
-        final float r = ((val >> 16) & 0xFF) * fact;
-        imgData.putFloat(r);
-        final float g = ((val >> 8) & 0xFF) * fact;
-        imgData.putFloat(g);
-        final float b = (val & 0xFF) * fact;
-        imgData.putFloat(b);
+        imgData.putFloat(((val >> 16) & 0xFF) * fact);
+        imgData.putFloat(((val >> 8) & 0xFF) * fact);
+        imgData.putFloat((val & 0xFF) * fact);
       }
     }
+
     long endTime = SystemClock.uptimeMillis();
     Log.d(TAG, "Timecost to put values into ByteBuffer: " + Long.toString(endTime - startTime));
   }

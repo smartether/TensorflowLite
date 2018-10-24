@@ -18,6 +18,9 @@ package io.github.lizhangqu.sample;
 import android.app.Activity;
 import android.os.Bundle;
 
+import org.opencv.android.InstallCallbackInterface;
+import org.opencv.android.LoaderCallbackInterface;
+
 /** Main {@code Activity} class for the Camera app. */
 public class CameraActivity extends Activity {
 
@@ -25,11 +28,29 @@ public class CameraActivity extends Activity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_camera);
-    if (null == savedInstanceState) {
-      getFragmentManager()
-          .beginTransaction()
-          .replace(R.id.container, Camera2BasicFragment.newInstance())
-          .commit();
-    }
+
+/*
+    org.opencv.android.OpenCVLoader.initAsync("3.4.1", getApplicationContext(), new LoaderCallbackInterface() {
+      @Override
+      public void onManagerConnected(int i) {
+        //if (null == savedInstanceState) {
+
+       // }
+      }
+
+      @Override
+      public void onPackageInstall(int i, InstallCallbackInterface installCallbackInterface) {
+
+      }
+    });
+*/
+    getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    org.opencv.android.OpenCVLoader.initDebug();
+
+    getFragmentManager()
+            .beginTransaction()
+            .replace(R.id.container, Camera2BasicFragment.newInstance())
+            .commit();
+
   }
 }
